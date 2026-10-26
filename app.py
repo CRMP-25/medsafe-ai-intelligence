@@ -7,7 +7,7 @@ from core import *
 from investigator import annual_trend, classify_reactions, evidence_gate, investigation_report
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.2-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 st.sidebar.caption('Live openFDA requests; source timestamps and URLs retained in investigation exports.')
@@ -29,10 +29,14 @@ with t1:
     st.markdown('#### Reporting trend by received year')
     tr=safe('trend')
     if tr:
-        yearly=annual_trend(tr.get('results',[]))
+        yearly=[r for r in tr.get('results',[]) if isinstance(r.get('report_count'),int)]
         if yearly: st.plotly_chart(px.line(pd.DataFrame(yearly),x='year',y='report_count',markers=True,title='FAERS reports by receipt year (not incidence)'),use_container_width=True)
-        else: st.info('No usable dated aggregates returned.')
-        st.caption('Source: '+tr['url']+' | API count limit may truncate dates; do not interpret as a complete time series.')
+        else: st.info('No annual totals were available from openFDA.')
+        if tr.get('failures'): st.warning(f"{len(tr['failures'])} year(s) unavailable from openFDA; missing years are not zero.")
+        with st.expander('Annual trend source URLs and retrieval status'):
+            st.dataframe(pd.DataFrame(tr.get('results',[])),use_container_width=True)
+            if tr.get('failures'): st.json(tr['failures'])
+        st.caption('Annual bounded FAERS report queries (meta.results.total); not incidence. Individual source URLs and timestamps above. Results may change with FAERS updates.')
     st.markdown('#### Disproportionality calculator · explicit 2 × 2 table')
     st.caption('a=drug+event, b=drug+other events, c=other drugs+event, d=other drugs+other events. Supply deduplicated, consistently defined FAERS case counts. The counts charted above cannot supply this table.')
     cols=st.columns(4); vals=[cols[i].number_input(k,min_value=0,value=v,step=1) for i,(k,v) in enumerate(zip(['a','b','c','d'],[30,170,60,740]))]
@@ -49,7 +53,8 @@ with t2:
         rows=[]
         for r in er['results']:
             rows.append({'safetyreportid':r.get('safetyreportid'),'receivedate':r.get('receivedate'),'categories':', '.join(classify_reactions(r)) or 'Unclassified', 'reactions':'; '.join(x.get('reactionmeddrapt','') for x in r.get('patient',{}).get('reaction',[]))})
-        st.dataframe(pd.DataFrame(rows),use_container_width=True)
+        if rows: st.dataframe(pd.DataFrame(rows),use_container_width=True)
+        else: st.info('No matching medication-error reports returned for this query.')
         st.caption('Source: '+er['url'])
 with t3:
     st.subheader('FDA labeling and recall records')
@@ -61,7 +66,9 @@ with t3:
                     if r.get(k):st.markdown('**'+k.replace('_',' ').title()+'**');st.write(' '.join(r[k])[:7000])
         st.caption('Label query: '+lab['url'])
     if rec:
-        st.dataframe(pd.DataFrame([{'date':x.get('report_date'),'reason':x.get('reason_for_recall'),'status':x.get('status'),'recall_number':x.get('recall_number')} for x in rec['results']]),use_container_width=True)
+        recall_rows=[{'date':x.get('report_date'),'reason':x.get('reason_for_recall'),'status':x.get('status'),'recall_number':x.get('recall_number')} for x in rec['results']]
+        if recall_rows: st.dataframe(pd.DataFrame(recall_rows),use_container_width=True)
+        else: st.info('No matching recall records returned for this query.')
         st.caption('Recall query: '+rec['url'])
 with t4:
     st.subheader('Reproducible evidence investigation · no LLM required')

@@ -35,3 +35,9 @@ Reference reviewed: `Healthcare_Intelligence_V7_7_11_Clinical_Funnel_Release.zip
 Added `investigator.py` deterministic evidence gates, medication-error term classification, annual aggregation of openFDA received-date counts, and downloadable HTML investigation report. Broadened medication-error search terms; still not comprehensive or validated. The trend endpoint is capped at 1000 distinct date buckets and may be truncated, so the chart must not be treated as a complete historical trend. ROR/PRR remains SYNTHETIC INPUT ONLY; live validated case-level disproportionality remains BLOCKED. No paid LLM required.
 
 Conference verification gates: live openFDA endpoint smoke tests, Streamlit rendering, API query acceptance and pagination, deduplicated FAERS contingency analysis, medication-error recall/precision review, and browser/deployment testing remain outstanding. Do not promote to production without these checks.
+
+## V1.0.2-testing — 2026-10-26
+- Corrected annual trend method: the deployed `count=receivedate` query returned HTTP 403. Now independently queries each receipt year using bounded `receivedate` filters and the openFDA response metadata total. Failed years are explicitly missing, not zero. Each successful year's URL and retrieval timestamp are shown in the UI.
+- Added retry for transient HTTP 429/5xx, preserved response totals, and avoided blank recall/error tables.
+- Corrected displayed version and hardened 2x2 input validation for empty marginal totals.
+- Local unit tests passed; live API responses and browser behavior require verification after deployment. This is a testing release, not a validated clinical safety signal.
