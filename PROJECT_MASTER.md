@@ -84,3 +84,51 @@ Before asking the user to repeat a step or re-upload an artifact, check existing
 ### V1.0.4.1 local corrective build — 2026-10-26/27
 
 Created a separate local candidate package based on the V1.0.4 ZIP. `app.py` now places Markdown/JSON/HTML downloads before the optional graph, wraps graph rendering in an exception boundary, uses an Apply Graph Settings form, and limits each of four evidence layers to 15 displayed records. GraphML export remains available only on successful graph construction. No evidence-retrieval algorithms or existing source data were changed. A regression test was added. **Local automated checks: 20 tests passed; Python compilation passed.** No Streamlit Cloud deployment, live API validation, or actual reproduction of the original crash was performed. The cause of the crash remains unconfirmed; process-level resource failures may not be caught by Python exceptions. Preserve V1.0.4 and all earlier deployments. Deploy to a separate `v1.0.4.1-testing` branch and new app only after user confirmation.
+
+---
+## Operational update — 2026-10-27 — V1.0.8 verified and V1.0.9 planned / local build
+
+### Confirmed V1.0.8 automation milestone (user-observed)
+- GitHub repository: `CRMP-25/medsafe-ai-intelligence`.
+- `v1.0.8-testing` published with GitHub Actions CI; user observed a green `MedSafe CI` run and its `validate` job, including checkout, Python setup, dependencies, compilation, deterministic tests and deterministic report fixture validation. The green check does not independently establish clinical correctness or live FDA integration.
+- Permanent GitHub branch `testing` created from `v1.0.8-testing`; existing versioned branches preserved.
+- Permanent Streamlit app: `https://medsafe-ai-testing.streamlit.app`, repository branch `testing`, entry point `app.py`, Python 3.11; user verified app loaded.
+- End-to-end redeployment test: banner changed to `AUTO-DEPLOY TEST` on `v1.0.8-testing`; CI passed; change merged into `testing`, pushed, and user observed the new banner on the same Streamlit URL. Thus automatic branch-following deployment was demonstrated.
+- Automatic **promotion** is NOT implemented: review and merge are manual. Existing optional `scripts/promote_testing.sh` is fast-forward-only and may refuse merge-commit histories. Do not force push.
+- The test banner is to be removed as part of V1.0.9, not as a separate cleanup release.
+
+### Long-term objective
+An expandable, evidence-grounded medication safety knowledge graph with explainable typed relationships, provenance and uncertainty. Current co-reporting is NOT causal evidence, comparative risk, incidence or a validated safety signal.
+
+### Carried-forward improvement register (do not silently drop)
+| ID | Capability | Priority | Status as of V1.0.9 planning |
+|---|---|---|---|
+| M01 | Semantic biomedical graph and typed relationships | Critical | Partial: evidence-derived types and co-mentions; clinical semantics pending |
+| M02 | Entity normalization and synonyms | Critical | V1.0.9 initial conservative text-variant review; ontology synonyms pending |
+| M03 | Complete evidence-backed relationships | Critical | V1.0.7 full provenance export; V1.0.9 relationship drilldown |
+| M04 | Evidence strength and defensible association measures | Critical | Support counts only; denominators/statistical validation pending |
+| M05 | Explainable interactive graph investigation | High | V1.0.9 selected co-reporting drilldown; full graph interaction pending |
+| M06 | Persistent growth across sessions | High | Manual JSON export/import only; durable backend pending |
+| M07 | Structured automated interpretation and reports | High | Existing deterministic HTML/Markdown/ZIP; richer research narrative pending |
+| M08 | FDA pagination, deduplication, completeness and date filtering | High | Partial retrieval and coverage disclosure; strengthening pending |
+| M09 | Medication error taxonomy and structured extraction | High | Narrow term search; validated taxonomy pending |
+| M10 | Longitudinal safety reporting analysis | Medium | Historical partial functions; validated temporal aggregation pending |
+| M11 | Validated signal/disproportionality analysis | High | Pending verified case-level contingency denominators |
+| M12 | Development automation and release safety | High | CI and stable Streamlit deployment verified; automated promotion pending |
+
+### V1.0.9 local candidate scope (not yet GitHub-published or cloud-tested)
+- `intelligence_v109.py`: conservative same-kind text normalization (case, whitespace, terminal period), **review only**; no source-graph rewriting or biomedical synonym assertion.
+- Evidence drilldown reconstructs supporting medication-error record IDs and URLs for a selected co-reporting pair, with counts checked against existing association output.
+- New UI for relationship explanation and normalization candidates; JSON downloads for each; existing comprehensive V1.0.7 ZIP unchanged.
+- Banner updated to `V1.0.9-testing` and temporary AUTO-DEPLOY TEST removed.
+- `tests/test_v109.py` added; CI module compilation updated. Local test results must be recorded separately after execution.
+
+### Version promotion plan and release gates
+1. Base new `v1.0.9-testing` branch on **permanent `testing`** (not `main` or a stale version branch).
+2. Apply only intended V1.0.9 files and documentation; preserve all working V1.0.8 features.
+3. Require passing deterministic CI and manual UI inspection; verify record-count parity, no fabricated evidence and complete source URLs.
+4. Merge approved candidate into permanent `testing`; verify same Streamlit URL updates; keep older deployments intact.
+5. Record observed results and unresolved defects in this file on every release.
+
+### Scientific / engineering nonclaims
+No live FDA integration test, external API freshness check, clinical terminology validation, causal inference, durable server-side storage or cloud deployment of V1.0.9 has been performed at the time this entry was drafted.

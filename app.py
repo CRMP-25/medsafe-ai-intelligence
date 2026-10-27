@@ -9,9 +9,10 @@ from reporting_v104 import markdown_report, build_evidence_graph, graphml_bytes,
 from intelligence_v105 import QUESTIONS, concept_graph, bounded_view, paths
 from semantic_v106 import semantic_graph, associations, export_bundle, import_bundle, merge_graphs
 from reporting_v107 import complete_report_zip
+from intelligence_v109 import canonical_groups, explain_association
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.7-testing · AUTO-DEPLOY TEST</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.9-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 st.sidebar.caption('Live openFDA requests; source timestamps and URLs retained in investigation exports.')
@@ -244,13 +245,41 @@ with t5:
             old=st.session_state.get('semantic_graph_v106')
             full=merge_graphs(old,fresh) if old is not None else fresh
             st.session_state['semantic_graph_v106']=full
-            st.markdown('#### Evidence-grounded semantic associations · V1.0.7')
+            st.markdown('#### Evidence-grounded semantic associations · V1.0.9')
             st.caption('Concept pairs are co-mentioned within individual retrieved medication-error reports. This does not imply causation, elevated risk, or novelty. Counts are limited to retrieved records.')
             pairs=associations(full)
             if pairs:
                 st.dataframe(pd.DataFrame(pairs[:100]),use_container_width=True,hide_index=True)
                 st.download_button('Download co-mention associations CSV',pd.DataFrame(pairs).to_csv(index=False),file_name=f'medsafe_{drug}_associations_v107_complete.csv',mime='text/csv')
-            else:st.info('No within-record concept pairs found in retrieved medication-error reports.')
+            if pairs:
+                st.markdown('#### Explain a co-reporting relationship · V1.0.9')
+                st.caption('Select an association to inspect the exact retrieved records that support it. Evidence is observational and does not establish causality or risk.')
+                chosen = st.selectbox('Inspect one association (top 100 by record support)',
+                    range(min(100, len(pairs))),
+                    format_func=lambda i: f"{pairs[i]['concept_a']} ↔ {pairs[i]['concept_b']} ({pairs[i]['co_reported_records']} records)",
+                    key='explain_pair_v109')
+                item = pairs[chosen]
+                explanation = explain_association(full, item['concept_a'], item['type_a'], item['concept_b'], item['type_b'])
+                st.metric('Supporting retrieved medication-error records', explanation['supporting_records'])
+                if explanation['supporting_records'] != item['co_reported_records']:
+                    st.error('Association count mismatch: investigate before relying on this result.')
+                st.caption(explanation['interpretation'] + ' ' + explanation['scope'])
+                st.dataframe(pd.DataFrame(explanation['evidence_records']), use_container_width=True, hide_index=True)
+                st.download_button('Download selected relationship evidence JSON',
+                    json.dumps(explanation, indent=2), file_name=f'medsafe_{drug}_relationship_evidence_v109.json',
+                    mime='application/json', key='explain_export_v109')
+            st.markdown('#### Conservative entity normalization review · V1.0.9')
+            st.caption('Review possible duplicates within the same entity type. This view does not modify the source graph or assert biomedical synonym equivalence.')
+            variants = canonical_groups(full)
+            st.write(f'{len(variants)} candidate duplicate groups (case, whitespace, and terminal periods only).')
+            if variants:
+                st.dataframe(pd.DataFrame([{'type': v['entity_type'], 'canonical': v['canonical_label'],
+                    'variants': ' | '.join(v['variants']), 'nodes': v['node_count']} for v in variants]),
+                    use_container_width=True, hide_index=True)
+                st.download_button('Download normalization review JSON', json.dumps(variants, indent=2),
+                    file_name=f'medsafe_{drug}_normalization_review_v109.json', mime='application/json',
+                    key='normalization_export_v109')
+            if not pairs:st.info('No within-record concept pairs found in retrieved medication-error reports.')
             st.markdown('#### One-click complete investigation export')
             st.caption('Includes every association source ID and URL, complete evidence records, full graph JSON/GraphML, investigation data, and readable HTML/Markdown reports. No eight-record export cap.')
             st.download_button('Download complete MedSafe investigation ZIP',complete_report_zip(inv,full,drug),file_name=f'medsafe_{drug}_complete_v107.zip',mime='application/zip',key='complete_report_v107')
