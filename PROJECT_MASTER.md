@@ -132,3 +132,13 @@ An expandable, evidence-grounded medication safety knowledge graph with explaina
 
 ### Scientific / engineering nonclaims
 No live FDA integration test, external API freshness check, clinical terminology validation, causal inference, durable server-side storage or cloud deployment of V1.0.9 has been performed at the time this entry was drafted.
+
+
+### V1.0.9 acceptance observations and V1.0.10 candidate (2026-10-27)
+- User confirmed stable testing deployment, CI green, evidence explorer, and normalization review.
+- Relationship export for `OVERDOSE` (adverse_event) and `death` (serious_outcome) declared 143 supporting retrieved medication-error reports with report IDs and FDA source URLs; this is co-reporting only, not causation or patient incidence.
+- Numeric concept `1` in `OVERDOSE` associations is typed `reported_sex_code`, so it is not necessarily an extraction error. Its display is ambiguous; FDA sex code 1 denotes male. Preserve raw code and provenance.
+- Normalization review reported 45 candidate groups; seven user-reviewed `reported_medication` examples were terminal-period variants, not clinical synonym equivalence. No graph mutation.
+- User provided comprehensive investigation ZIP named `complete_v107`; earlier assistant reported 2,063 nodes, 7,666 edges, 29,771 associations, and 647 evidence records, with 500/7,078 medication-error records retrieved (about 7.1%). These figures are historical snapshot findings and require re-validation for new investigations.
+- V1.0.10 candidate adds display-only sex-code decoding, medication label presentation, bounded selectable medication-error retrieval caps, retrieval coverage audit, corrected complete ZIP version label, normalization review in ZIP, and deterministic tests. No claim of deployed V1.0.10 or live FDA API validation.
+- Outstanding: inspect all 45 candidate groups; verify all FDA source links and report semantics independently; investigate scalability at larger retrieval caps; controlled clinical ontology mapping, meaningful relationship categorization, durable graph persistence, validated case-level deduplication and signal analysis.

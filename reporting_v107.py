@@ -22,8 +22,9 @@ def complete_report_zip(inv,g,drug):
     edges=[{'from':a,'to':b,**d} for a,b,d in g.edges(data=True)]
     types=dict(Counter(d.get('kind','unknown') for _,d in g.nodes(data=True)))
     sources=dict(Counter(d.get('source_kind','unknown') for _,d in g.nodes(data=True) if d.get('kind')=='record'))
-    manifest={'schema':'medsafe-complete-report-v1','drug':drug,'created_utc':datetime.now(timezone.utc).isoformat(),
+    manifest={'schema':'medsafe-complete-report-v1','application_version':'1.0.10-testing','drug':drug,'created_utc':datetime.now(timezone.utc).isoformat(),
               'nodes':len(nodes),'edges':len(edges),'associations':len(pairs),'node_types':types,'record_sources':sources,
+              'retrieval_audit':__import__('intelligence_v110').retrieval_audit(inv),
               'limitations':['FAERS co-reporting is not causation or incidence.','Only retrieved evidence is included; API retrieval may be incomplete.','Graph and association counts are not risk estimates.']}
     top=pairs[:50]
     trs=''.join('<tr>'+''.join('<td>'+escape(str(row.get(k,'')))+'</td>' for k in ('concept_a','concept_b','co_reported_records'))+'</tr>' for row in top)
@@ -32,6 +33,7 @@ def complete_report_zip(inv,g,drug):
     mem=io.BytesIO()
     with zipfile.ZipFile(mem,'w',compression=zipfile.ZIP_DEFLATED) as z:
         files={'manifest.json':json.dumps(manifest,indent=2),'investigation.json':json.dumps(inv,indent=2,default=str),
+               'normalization_review.json':json.dumps(__import__('intelligence_v109').canonical_groups(g),indent=2),
                'semantic_graph.json':export_bundle(g,drug),'semantic_graph.graphml':graphml_bytes(g),
                'associations.csv':_csv(pairs),'evidence_records.csv':_csv(records),
                'graph_nodes.csv':_csv(nodes),'graph_edges.csv':_csv(edges),

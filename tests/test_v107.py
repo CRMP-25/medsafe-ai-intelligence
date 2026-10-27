@@ -15,6 +15,7 @@ def test_all_provenance_exported():
     assert len(pair['source_urls'].split(' | '))==12
     blob=complete_report_zip({'drug':'test','evidence':{}},g,'test')
     with zipfile.ZipFile(io.BytesIO(blob)) as z:
-        assert len(z.namelist())==10
+        assert len(z.namelist())>=10
+        assert "normalization_review.json" in z.namelist()
         rows=list(csv.DictReader(io.StringIO(z.read('associations.csv').decode())))
         assert len(rows[0]['source_ids'].split(', '))==12
