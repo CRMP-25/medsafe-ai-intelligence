@@ -7,9 +7,10 @@ from core import *
 from investigator import annual_trend, classify_reactions, evidence_gate, investigation_report
 from reporting_v104 import markdown_report, build_evidence_graph, graphml_bytes, summary, record_link
 from intelligence_v105 import QUESTIONS, concept_graph, bounded_view, paths
+from semantic_v106 import semantic_graph, associations, export_bundle, import_bundle, merge_graphs
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.5.1-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.6-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 st.sidebar.caption('Live openFDA requests; source timestamps and URLs retained in investigation exports.')
@@ -237,7 +238,30 @@ with t5:
                 run_shared_investigation(drug)
             st.rerun()
         try:
-            full=concept_graph(inv)
+            # Semantic graph is based on exact source-record fields, not inferred mechanisms.
+            fresh=semantic_graph(inv)
+            old=st.session_state.get('semantic_graph_v106')
+            full=merge_graphs(old,fresh) if old is not None else fresh
+            st.session_state['semantic_graph_v106']=full
+            st.markdown('#### Evidence-grounded semantic associations · V1.0.6')
+            st.caption('Concept pairs are co-mentioned within individual retrieved medication-error reports. This does not imply causation, elevated risk, or novelty. Counts are limited to retrieved records.')
+            pairs=associations(full)
+            if pairs:
+                st.dataframe(pd.DataFrame(pairs[:100]),use_container_width=True,hide_index=True)
+                st.download_button('Download co-mention associations CSV',pd.DataFrame(pairs).to_csv(index=False),file_name=f'medsafe_{drug}_associations_v106.csv',mime='text/csv')
+            else:st.info('No within-record concept pairs found in retrieved medication-error reports.')
+            st.markdown('#### Portable graph growth')
+            st.caption('Session growth is retained while this session is active. Streamlit Community Cloud local storage is not durable: download a graph bundle and upload it in a future session to continue growing the graph.')
+            st.download_button('Download complete semantic graph JSON',export_bundle(full,drug),file_name=f'medsafe_{drug}_semantic_v106.json',mime='application/json')
+            upload=st.file_uploader('Restore or merge a previous MedSafe semantic graph JSON',type=['json'],key='graph_restore_v106')
+            if upload is not None and st.button('Merge uploaded graph',key='merge_graph_v106'):
+                try:
+                    restored=import_bundle(upload.getvalue())
+                    st.session_state['semantic_graph_v106']=merge_graphs(restored,full)
+                    st.success('Previous graph merged. New nodes and edges retained.')
+                    st.rerun()
+                except (ValueError,TypeError,KeyError) as error:st.error(f'Graph import rejected: {error}')
+
             c1,c2,c3=st.columns(3)
             c1.metric('Evidence graph nodes',full.number_of_nodes())
             c2.metric('Evidence graph edges',full.number_of_edges())
