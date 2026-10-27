@@ -9,12 +9,32 @@ from reporting_v104 import markdown_report, build_evidence_graph, graphml_bytes,
 from intelligence_v105 import QUESTIONS, concept_graph, bounded_view, paths
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.5-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.5.1-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 st.sidebar.caption('Live openFDA requests; source timestamps and URLs retained in investigation exports.')
 @st.cache_data(ttl=1800,show_spinner=False)
 def load(kind,drug): return {'events':events,'trend':trend,'labels':labels,'recalls':recalls,'errors':errors}[kind](drug)
+def run_shared_investigation(selected_drug):
+    """One investigation path for both tabs; state is scoped to medication."""
+    evidence={}
+    for kind in ['events','errors','labels','recalls']:
+        try:
+            evidence[kind]=load(kind,selected_drug)
+        except Exception as exc:
+            evidence[kind]={'error':str(exc),'results':[]}
+    st.session_state['investigation']={
+        'drug':selected_drug,
+        'generated_utc':__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
+        'evidence':evidence,
+        'limitations':[
+            'Spontaneous reports cannot establish causality or incidence.',
+            'Term searches may miss synonyms, coding variants, and duplicate records.',
+            'Graph connections are evidence associations, not causal edges.'
+        ]
+    }
+    return st.session_state['investigation']
+
 def safe(kind):
     try:return load(kind,drug)
     except Exception as e:st.error(f'{kind} unavailable: {e}');return None
@@ -162,12 +182,9 @@ def render_investigation_graph(inv, selected_kinds, max_nodes):
 with t4:
     st.subheader('Reproducible evidence investigation · no LLM required')
     st.caption('Deterministic evidence retrieval and graph construction. Graph edges denote database co-reporting or document membership, not proven clinical mechanisms.')
-    if st.button('Run investigation',type='primary'):
-        evidence={}
-        for kind in ['events','errors','labels','recalls']:
-            try:evidence[kind]=load(kind,drug)
-            except Exception as e:evidence[kind]={'error':str(e),'results':[]}
-        st.session_state['investigation']={'drug':drug,'generated_utc':__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),'evidence':evidence,'limitations':['Spontaneous reports cannot establish causality or incidence.','Term searches may miss synonyms, coding variants, and duplicate records.','Graph connections are evidence associations, not causal edges.']}
+    if st.button('Run investigation',type='primary',key='run_investigator_v1051'):
+        with st.spinner('Retrieving FDA evidence for the selected medication...'):
+            run_shared_investigation(drug)
     inv=st.session_state.get('investigation')
     if inv and inv['drug']==drug:
         evidence=inv['evidence']; reactions=evidence['events'].get('results',[])[:12]
@@ -208,8 +225,17 @@ with t5:
     st.caption('Graph is reconstructed from the current investigation. Concept nodes are shared across records. This version does not yet persist graph growth between sessions or infer biomedical mechanisms.')
     inv=st.session_state.get('investigation')
     if not inv or inv.get('drug')!=drug:
-        st.info('Run an investigation for the selected medication in the Agentic Safety Investigator tab to populate this graph.')
+        st.info('No investigation is available in this browser session for the selected medication. Run it here to populate the graph.')
+        if st.button('Run investigation and build knowledge graph',type='primary',key='run_living_graph_v1051'):
+            with st.spinner('Retrieving FDA evidence and building the knowledge graph...'):
+                inv=run_shared_investigation(drug)
+            st.rerun()
     else:
+        st.success(f'Evidence available for {drug}; investigation retrieved at {inv.get("generated_utc", "unknown time")} UTC.')
+        if st.button('Refresh investigation evidence',key='refresh_living_graph_v1051'):
+            with st.spinner('Refreshing FDA evidence...'):
+                run_shared_investigation(drug)
+            st.rerun()
         try:
             full=concept_graph(inv)
             c1,c2,c3=st.columns(3)
