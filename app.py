@@ -8,7 +8,7 @@ from investigator import annual_trend, classify_reactions, evidence_gate, invest
 from reporting_v104 import markdown_report, build_evidence_graph, graphml_bytes, summary, record_link
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.4-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.4.1-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 st.sidebar.caption('Live openFDA requests; source timestamps and URLs retained in investigation exports.')
@@ -112,6 +112,39 @@ with t3:
             st.dataframe(rdf,use_container_width=True)
         else: st.info('No matching recall records returned for this query.')
         st.caption('Recall query: '+rec['url'])
+
+def render_investigation_graph(inv, selected_kinds, max_nodes):
+    import plotly.graph_objects as go
+    drug=inv["drug"]
+    g=build_evidence_graph(inv,selected_kinds,max_nodes)
+    # Hierarchical layout: medication -> evidence category -> retrieved record.
+    categories=[n for n,d in g.nodes(data=True) if d.get('kind')=='category']
+    pos={drug:(0,0)}
+    for i,category in enumerate(categories):
+        y=(len(categories)-1)/2-i
+        pos[category]=(1.5,y*2.4)
+        children=list(g.successors(category))
+        for j,node in enumerate(children):pos[node]=(3.4,y*2.4+(j-(len(children)-1)/2)*0.24)
+    edge_x=[];edge_y=[]
+    for u,v in g.edges():
+        if u in pos and v in pos:edge_x += [pos[u][0],pos[v][0],None];edge_y += [pos[u][1],pos[v][1],None]
+    edge_trace=go.Scatter(x=edge_x,y=edge_y,mode='lines',line={'color':'#8194a8','width':1},hoverinfo='skip',showlegend=False)
+    traces=[edge_trace]
+    for kind,colour,size in [('medication','#0d9fa5',24),('category','#f3b14b',17),('record','#88b9df',9)]:
+        nodes=[n for n,d in g.nodes(data=True) if d.get('kind')==kind and n in pos]
+        traces.append(go.Scatter(x=[pos[n][0] for n in nodes],y=[pos[n][1] for n in nodes],mode='markers+text' if kind!='record' else 'markers',
+            text=[g.nodes[n].get('label',n) for n in nodes],textposition='top center',
+            hovertext=[g.nodes[n].get('summary',g.nodes[n].get('label',n)) for n in nodes],hoverinfo='text',
+            marker={'size':size,'color':colour},name=kind))
+    st.plotly_chart(go.Figure(data=traces,layout={'height':620,'xaxis':{'visible':False},'yaxis':{'visible':False},'margin':{'l':20,'r':20,'t':20,'b':20},'hovermode':'closest'}),use_container_width=True)
+    record_nodes=[n for n,d in g.nodes(data=True) if d.get('kind')=='record']
+    if record_nodes:
+        chosen_node=st.selectbox('Inspect evidence node',record_nodes,format_func=lambda n:f'{g.nodes[n].get("category", "")}: {g.nodes[n].get("label",n)}')
+        node=g.nodes[chosen_node]
+        st.write(node.get('summary',''))
+        if node.get('url'):st.markdown(f'[Open corresponding FDA record query]({node["url"]})')
+    return g
+
 with t4:
     st.subheader('Reproducible evidence investigation · no LLM required')
     st.caption('Deterministic evidence retrieval and graph construction. Graph edges denote database co-reporting or document membership, not proven clinical mechanisms.')
@@ -125,47 +158,33 @@ with t4:
     if inv and inv['drug']==drug:
         evidence=inv['evidence']; reactions=evidence['events'].get('results',[])[:12]
         sections=[x for x in ['boxed_warning','warnings','contraindications'] if any(x in z for z in evidence['labels'].get('results',[]))]
-        g=graph(drug,reactions,sections)
+        # Exports are independent of the optional visualization.
+        st.markdown('#### Investigation evidence exports')
+        st.download_button('Download comprehensive Markdown evidence report',markdown_report(inv),file_name=f'medsafe_{drug}_evidence.md',mime='text/markdown',key='md_v1041')
+        st.download_button('Download investigation JSON + provenance',json.dumps(inv,indent=2,default=str),file_name=f'medsafe_{drug}_investigation.json',mime='application/json',key='json_v1041')
+        st.download_button('Download printable HTML investigation report',investigation_report(inv),file_name=f'medsafe_{drug}_report.html',mime='text/html',key='html_v1041')
         st.markdown('#### Explore evidence-linked knowledge graph')
-        selected_kinds=st.multiselect('Evidence layers', ['events','errors','labels','recalls'],default=['events','errors','labels','recalls'],key='graph_layers_v104')
-        max_nodes=st.slider('Records per evidence layer',min_value=3,max_value=30,value=10,step=1,key='graph_max_v104')
-        g=build_evidence_graph(inv,selected_kinds,max_nodes)
-        import plotly.graph_objects as go
-        # Hierarchical layout: medication -> evidence category -> retrieved record.
-        categories=[n for n,d in g.nodes(data=True) if d.get('kind')=='category']
-        pos={drug:(0,0)}
-        for i,category in enumerate(categories):
-            y=(len(categories)-1)/2-i
-            pos[category]=(1.5,y*2.4)
-            children=list(g.successors(category))
-            for j,node in enumerate(children):pos[node]=(3.4,y*2.4+(j-(len(children)-1)/2)*0.24)
-        edge_x=[];edge_y=[]
-        for u,v in g.edges():
-            if u in pos and v in pos:edge_x += [pos[u][0],pos[v][0],None];edge_y += [pos[u][1],pos[v][1],None]
-        edge_trace=go.Scatter(x=edge_x,y=edge_y,mode='lines',line={'color':'#8194a8','width':1},hoverinfo='skip',showlegend=False)
-        traces=[edge_trace]
-        for kind,colour,size in [('medication','#0d9fa5',24),('category','#f3b14b',17),('record','#88b9df',9)]:
-            nodes=[n for n,d in g.nodes(data=True) if d.get('kind')==kind and n in pos]
-            traces.append(go.Scatter(x=[pos[n][0] for n in nodes],y=[pos[n][1] for n in nodes],mode='markers+text' if kind!='record' else 'markers',
-                text=[g.nodes[n].get('label',n) for n in nodes],textposition='top center',
-                hovertext=[g.nodes[n].get('summary',g.nodes[n].get('label',n)) for n in nodes],hoverinfo='text',
-                marker={'size':size,'color':colour},name=kind))
-        st.plotly_chart(go.Figure(data=traces,layout={'height':620,'xaxis':{'visible':False},'yaxis':{'visible':False},'margin':{'l':20,'r':20,'t':20,'b':20},'hovermode':'closest'}),use_container_width=True)
-        record_nodes=[n for n,d in g.nodes(data=True) if d.get('kind')=='record']
-        if record_nodes:
-            chosen_node=st.selectbox('Inspect evidence node',record_nodes,format_func=lambda n:f'{g.nodes[n].get("category", "")}: {g.nodes[n].get("label",n)}')
-            node=g.nodes[chosen_node]
-            st.write(node.get('summary',''))
-            if node.get('url'):st.markdown(f'[Open corresponding FDA record query]({node["url"]})')
-        st.caption('Showing a bounded, filterable subset of retrieved evidence nodes. Graph edges indicate record membership or reported terms, not proven causality.')
+        st.caption('Change settings, then select Apply Graph Settings. Changing controls alone does not rebuild the graph.')
+        graph_key='graph_applied_v1041'
+        if st.session_state.get(graph_key,{}).get('drug')!=drug:
+            st.session_state[graph_key]={'drug':drug,'layers':['events','errors','labels','recalls'],'nodes':8}
+        with st.form('graph_settings_form_v1041'):
+            selected_kinds=st.multiselect('Evidence layers',['events','errors','labels','recalls'],default=st.session_state[graph_key]['layers'])
+            max_nodes=st.slider('Records per evidence layer',min_value=3,max_value=15,value=st.session_state[graph_key]['nodes'],step=1)
+            apply_settings=st.form_submit_button('Apply Graph Settings')
+        if apply_settings:
+            st.session_state[graph_key]={'drug':drug,'layers':selected_kinds,'nodes':max_nodes}
+        applied=st.session_state[graph_key]
+        st.caption(f"Graph settings applied: {applied['nodes']} records per layer; {len(applied['layers'])} selected layers. Maximum 15 per layer.")
+        try:
+            g=render_investigation_graph(inv,applied['layers'],applied['nodes'])
+            st.download_button('Download knowledge graph GraphML',graphml_bytes(g),file_name=f'medsafe_{drug}_graph.graphml',mime='application/xml',key='graphml_v1041')
+            st.caption('Showing a bounded, filterable subset of retrieved evidence nodes. Graph edges indicate record membership or reported terms, not proven causality.')
+        except Exception as graph_exc:
+            st.error('The graph could not be rendered. Investigation findings and report downloads remain available above.')
+            st.caption(f'Graph diagnostic: {type(graph_exc).__name__}: {str(graph_exc)[:300]}')
         st.markdown('**Evidence gates:**')
         st.json(evidence_gate(evidence))
         st.markdown('**Evidence-grounded findings:**')
         st.write(f"For {drug}, the current retrieval returned {len(reactions)} displayed reaction terms, {len(evidence['errors'].get('results',[]))} medication-error records, {len(evidence['labels'].get('results',[]))} label records, and {len(evidence['recalls'].get('results',[]))} recall records. These are retrieval counts, not incidence or risk estimates.")
         for kind in ('errors','labels','recalls'):coverage(evidence[kind],kind.title())
-        report=json.dumps(inv,indent=2,default=str)
-        st.download_button('Download investigation JSON + provenance',report,file_name=f'medsafe_{drug}_investigation.json',mime='application/json')
-        st.download_button('Download knowledge graph GraphML',graphml_bytes(g),file_name=f'medsafe_{drug}_graph.graphml',mime='application/xml')
-        st.download_button('Download comprehensive Markdown evidence report',markdown_report(inv),file_name=f'medsafe_{drug}_evidence.md',mime='text/markdown')
-
-        st.download_button('Download printable HTML investigation report',investigation_report(inv),file_name=f'medsafe_{drug}_report.html',mime='text/html')

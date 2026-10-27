@@ -29,15 +29,58 @@ Create a NEW GitHub repository `medsafe-ai-intelligence` (do not reuse Kerendia)
 ## Release history
 1.0.0 initial independent prototype; no previous MedSafe functionality to regress.
 
-## V1.0.1 — 2026-10-26 | Kerendia source-informed update
-Reference reviewed: `Healthcare_Intelligence_V7_7_11_Clinical_Funnel_Release.zip`, especially `app/src/clinical_funnel.py`, `app/src/engine.py`, `app/PROJECT_MASTER.md`, and release practices. Source was inspected read-only and is not bundled or modified. Adopted the evidence-gating pattern (unsupported downstream inference explicitly BLOCKED), independent project records, and reproducible test discipline.
+---
+## Operational update — 2026-10-26/27 (V1.0.1–V1.0.4)
 
-Added `investigator.py` deterministic evidence gates, medication-error term classification, annual aggregation of openFDA received-date counts, and downloadable HTML investigation report. Broadened medication-error search terms; still not comprehensive or validated. The trend endpoint is capped at 1000 distinct date buckets and may be truncated, so the chart must not be treated as a complete historical trend. ROR/PRR remains SYNTHETIC INPUT ONLY; live validated case-level disproportionality remains BLOCKED. No paid LLM required.
+**Scope and evidence:** This update records user-reported Streamlit deployment observations and the downloaded `medsafe_buprenorphine_evidence.md` report. It does not imply direct access to Streamlit server logs, GitHub write access, or independently executed cloud acceptance tests. Earlier sections above are historical V1.0.0 status, not the current deployment state.
 
-Conference verification gates: live openFDA endpoint smoke tests, Streamlit rendering, API query acceptance and pagination, deduplicated FAERS contingency analysis, medication-error recall/precision review, and browser/deployment testing remain outstanding. Do not promote to production without these checks.
+### Deployed versions and preservation
 
-## V1.0.2-testing — 2026-10-26
-- Corrected annual trend method: the deployed `count=receivedate` query returned HTTP 403. Now independently queries each receipt year using bounded `receivedate` filters and the openFDA response metadata total. Failed years are explicitly missing, not zero. Each successful year's URL and retrieval timestamp are shown in the UI.
-- Added retry for transient HTTP 429/5xx, preserved response totals, and avoided blank recall/error tables.
-- Corrected displayed version and hardened 2x2 input validation for empty marginal totals.
-- Local unit tests passed; live API responses and browser behavior require verification after deployment. This is a testing release, not a validated clinical safety signal.
+| Version | Testing branch | Streamlit URL | Observed status |
+|---|---|---|---|
+| V1.0.1 | `v1.0.1-testing` | https://medsafe-ai-intelligence.streamlit.app/ | Previously deployed; current health not rechecked |
+| V1.0.2 | `v1.0.2-testing` | https://medsafe-ai-v102.streamlit.app/ | Previously deployed; current health not rechecked |
+| V1.0.3 | `v1.0.3-testing` | https://medsafe-ai-v103.streamlit.app/ | User previously verified working |
+| V1.0.4 | `v1.0.4-testing` | https://medsafe-ai-v104.streamlit.app/ | User confirmed page restored after reboot; stability remains unverified |
+
+Repository: `CRMP-25/medsafe-ai-intelligence`; Streamlit Community Cloud workspace `crmp-25`. **Do not change Kerendia or previous MedSafe releases.** The original V1.0.0 deployment instructions above are historical and must not be treated as current instructions.
+
+### V1.0.4 observed functionality
+
+- User confirmed FDA Regulatory Evidence interface displayed 100/103 labels and 32/32 recalls; searchable table and label inspection worked.
+- User previously verified V1.0.3 retrieval of 500/7,078 medication-error records, 100/103 labels and 32/32 recalls, with a functional evidence graph (overcrowded labels).
+- V1.0.4 added a filtered evidence graph and downloadable Markdown investigation report. The user downloaded and supplied `medsafe_buprenorphine_evidence.md`, establishing that Markdown export worked at least once.
+- Repeated changes to the Agentic Safety Investigator graph node-count control preceded a full-app error. Streamlit displayed a generic “Oh no. Error running app” message; the app page returned after the user selected **Reboot**. **Root cause is unknown without logs or reproduction.** Do not assert confirmed out-of-memory or a specific exception.
+
+### Downloaded buprenorphine investigation — actual reported completeness
+
+Generated UTC: `2026-10-27T00:50:04.949057+00:00`.
+
+| Evidence type | Retrieved | API matching | Reported coverage |
+|---|---:|---:|---:|
+| Reaction-term event summary | 15 | Unknown | Unknown |
+| Medication-error reports | 500 | 7,078 | 7.1% |
+| FDA labels | 100 | 103 | 97.1% |
+| Recalls | 32 | 32 | 100.0% |
+
+These are records or aggregated terms, **not patient counts or clinical incidence**. Matching totals are query- and time-dependent. The report contains source query links and retrieval timestamps. Its partial error-report and label coverage must be visible in the user interface and exports; no claim of complete medication-error surveillance is justified.
+
+### V1.0.4.1 proposed corrective scope — NOT IMPLEMENTED
+
+1. Make graph node-count changes explicit via **Apply Graph Settings**; prevent unnecessary retrieval/reconstruction on each widget change.
+2. Bound node and edge counts and graph-rendering workload; choose a conservative limit based on measured cloud behavior, not an arbitrary guarantee.
+3. Isolate graph-rendering exceptions so the investigator and Markdown download can remain available where feasible.
+4. Reuse cached evidence, avoid repeated openFDA calls, and retain query URLs/timestamps in reports.
+5. Display retrieved-versus-matching counts and coverage limitations prominently, particularly medication errors (500/7,078).
+6. Test repeated node-setting changes, reruns, download after graph failure, cloud reboot/recovery, and regression of all existing tabs.
+7. Preserve V1.0.4 and older branches; create a separate V1.0.4.1 testing branch only after patch validation and explicit deployment authorization.
+
+**Acceptance status:** V1.0.4.1 code, tests, and deployment are pending. V1.0.4 is restored but not yet stability-certified. October 30 conference demo readiness remains conditional on representative cloud acceptance tests.
+
+### Collaboration and continuity protocol
+
+Before asking the user to repeat a step or re-upload an artifact, check existing conversation attachments, Project files, and available local files. Use the most recent validated artifact and retain version/branch specificity. Give exact one-step-at-a-time UI instructions, based on the UI actually shown; do not send the user to nonexistent Streamlit **Logs** menu options or Settings paths. Clearly separate **observed**, **tested**, **proposed**, and **not yet done**. Do not imply background execution or cloud changes without tool evidence.
+
+### V1.0.4.1 local corrective build — 2026-10-26/27
+
+Created a separate local candidate package based on the V1.0.4 ZIP. `app.py` now places Markdown/JSON/HTML downloads before the optional graph, wraps graph rendering in an exception boundary, uses an Apply Graph Settings form, and limits each of four evidence layers to 15 displayed records. GraphML export remains available only on successful graph construction. No evidence-retrieval algorithms or existing source data were changed. A regression test was added. **Local automated checks: 20 tests passed; Python compilation passed.** No Streamlit Cloud deployment, live API validation, or actual reproduction of the original crash was performed. The cause of the crash remains unconfirmed; process-level resource failures may not be caught by Python exceptions. Preserve V1.0.4 and all earlier deployments. Deploy to a separate `v1.0.4.1-testing` branch and new app only after user confirmation.
