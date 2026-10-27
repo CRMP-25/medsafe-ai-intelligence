@@ -5,9 +5,10 @@ import plotly.express as px
 import networkx as nx
 from core import *
 from investigator import annual_trend, classify_reactions, evidence_gate, investigation_report
+from reporting_v104 import markdown_report, build_evidence_graph, graphml_bytes, summary, record_link
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.3-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.4-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 st.sidebar.caption('Live openFDA requests; source timestamps and URLs retained in investigation exports.')
@@ -75,10 +76,30 @@ with t3:
     lab=safe('labels'); rec=safe('recalls')
     if lab:
         coverage(lab,'FDA labels')
+        label_rows=[]
         for i,r in enumerate(lab['results']):
-            with st.expander(f"Label {i+1} · {', '.join(r.get('openfda',{}).get('brand_name',[])[:2]) or drug}"):
+            of=r.get('openfda') or {}
+            label_rows.append({'number':i+1,'product':', '.join(of.get('brand_name') or of.get('generic_name') or []) or drug,
+                               'label_id':r.get('id',''), 'boxed_warning':bool(r.get('boxed_warning')),
+                               'warnings':bool(r.get('warnings')), 'contraindications':bool(r.get('contraindications'))})
+        if label_rows:
+            label_df=pd.DataFrame(label_rows)
+            search_label=st.text_input('Search labels by product name or label ID',key='label_search_v104')
+            if search_label:
+                mask=label_df[['product','label_id']].astype(str).apply(lambda col:col.str.contains(search_label,case=False,regex=False)).any(axis=1)
+                label_df=label_df[mask]
+            only_boxed=st.checkbox('Show only labels with boxed warnings',key='label_boxed_v104')
+            if only_boxed:label_df=label_df[label_df['boxed_warning']]
+            st.dataframe(label_df,use_container_width=True,hide_index=True)
+            if not label_df.empty:
+                choice=st.selectbox('Inspect a label',label_df['number'].tolist(),format_func=lambda n:f'Label {n}: {label_rows[n-1]["product"]} ({str(label_rows[n-1]["label_id"])[:12]})')
+                selected_label=lab['results'][choice-1]
                 for k in ['boxed_warning','warnings','contraindications','precautions','dosage_and_administration']:
-                    if r.get(k):st.markdown('**'+k.replace('_',' ').title()+'**');st.write(' '.join(r[k])[:7000])
+                    if selected_label.get(k):
+                        with st.expander(k.replace('_',' ').title(),expanded=(k=='boxed_warning')):
+                            st.write(' '.join(selected_label[k])[:12000])
+                st.markdown(f'[Open FDA source for this label]({record_link("labels",selected_label,lab.get("url"))})')
+            else:st.info('No labels match the selected filters.')
         st.caption('Label query: '+lab['url'])
     if rec:
         coverage(rec,'FDA recalls')
@@ -105,25 +126,38 @@ with t4:
         evidence=inv['evidence']; reactions=evidence['events'].get('results',[])[:12]
         sections=[x for x in ['boxed_warning','warnings','contraindications'] if any(x in z for z in evidence['labels'].get('results',[]))]
         g=graph(drug,reactions,sections)
-        # Evidence-document nodes and typed provenance links, without causal claims.
-        for kind in ('errors','labels','recalls'):
-            payload=evidence.get(kind,{})
-            if not payload.get('url'):continue
-            source_id=f'openFDA {kind}'
-            g.add_node(source_id,kind='evidence source',url=payload['url'])
-            g.add_edge(drug,source_id,relation='queried evidence source',source=payload['url'])
-            for j,record in enumerate(payload.get('results',[])[:12]):
-                if kind=='errors':rid=str(record.get('safetyreportid') or j); name=f'FAERS report {rid}'
-                elif kind=='recalls':name=f'Recall {record.get("recall_number") or j}'
-                else:name=f'FDA label {record.get("id") or j}'
-                g.add_node(name,kind=kind+' record')
-                g.add_edge(source_id,name,relation='returned record',source=payload['url'])
+        st.markdown('#### Explore evidence-linked knowledge graph')
+        selected_kinds=st.multiselect('Evidence layers', ['events','errors','labels','recalls'],default=['events','errors','labels','recalls'],key='graph_layers_v104')
+        max_nodes=st.slider('Records per evidence layer',min_value=3,max_value=30,value=10,step=1,key='graph_max_v104')
+        g=build_evidence_graph(inv,selected_kinds,max_nodes)
         import plotly.graph_objects as go
-        pos=nx.spring_layout(g,seed=17)
-        edges=[]
-        for u,v in g.edges():edges.append(go.Scatter(x=[pos[u][0],pos[v][0],None],y=[pos[u][1],pos[v][1],None],mode='lines',line={'color':'#91a7bb'},hoverinfo='skip',showlegend=False))
-        nodes=go.Scatter(x=[pos[n][0] for n in g],y=[pos[n][1] for n in g],text=list(g.nodes),mode='markers+text',textposition='top center',marker={'size':[24 if n==drug else 13 for n in g],'color':['#087e8b' if n==drug else '#e3a548' for n in g]},hovertext=[str(g.nodes[n]) for n in g],hoverinfo='text',showlegend=False)
-        st.plotly_chart(go.Figure(data=edges+[nodes],layout={'height':540,'xaxis':{'visible':False},'yaxis':{'visible':False},'margin':{'l':10,'r':10,'t':20,'b':10}}),use_container_width=True)
+        # Hierarchical layout: medication -> evidence category -> retrieved record.
+        categories=[n for n,d in g.nodes(data=True) if d.get('kind')=='category']
+        pos={drug:(0,0)}
+        for i,category in enumerate(categories):
+            y=(len(categories)-1)/2-i
+            pos[category]=(1.5,y*2.4)
+            children=list(g.successors(category))
+            for j,node in enumerate(children):pos[node]=(3.4,y*2.4+(j-(len(children)-1)/2)*0.24)
+        edge_x=[];edge_y=[]
+        for u,v in g.edges():
+            if u in pos and v in pos:edge_x += [pos[u][0],pos[v][0],None];edge_y += [pos[u][1],pos[v][1],None]
+        edge_trace=go.Scatter(x=edge_x,y=edge_y,mode='lines',line={'color':'#8194a8','width':1},hoverinfo='skip',showlegend=False)
+        traces=[edge_trace]
+        for kind,colour,size in [('medication','#0d9fa5',24),('category','#f3b14b',17),('record','#88b9df',9)]:
+            nodes=[n for n,d in g.nodes(data=True) if d.get('kind')==kind and n in pos]
+            traces.append(go.Scatter(x=[pos[n][0] for n in nodes],y=[pos[n][1] for n in nodes],mode='markers+text' if kind!='record' else 'markers',
+                text=[g.nodes[n].get('label',n) for n in nodes],textposition='top center',
+                hovertext=[g.nodes[n].get('summary',g.nodes[n].get('label',n)) for n in nodes],hoverinfo='text',
+                marker={'size':size,'color':colour},name=kind))
+        st.plotly_chart(go.Figure(data=traces,layout={'height':620,'xaxis':{'visible':False},'yaxis':{'visible':False},'margin':{'l':20,'r':20,'t':20,'b':20},'hovermode':'closest'}),use_container_width=True)
+        record_nodes=[n for n,d in g.nodes(data=True) if d.get('kind')=='record']
+        if record_nodes:
+            chosen_node=st.selectbox('Inspect evidence node',record_nodes,format_func=lambda n:f'{g.nodes[n].get("category", "")}: {g.nodes[n].get("label",n)}')
+            node=g.nodes[chosen_node]
+            st.write(node.get('summary',''))
+            if node.get('url'):st.markdown(f'[Open corresponding FDA record query]({node["url"]})')
+        st.caption('Showing a bounded, filterable subset of retrieved evidence nodes. Graph edges indicate record membership or reported terms, not proven causality.')
         st.markdown('**Evidence gates:**')
         st.json(evidence_gate(evidence))
         st.markdown('**Evidence-grounded findings:**')
@@ -131,6 +165,7 @@ with t4:
         for kind in ('errors','labels','recalls'):coverage(evidence[kind],kind.title())
         report=json.dumps(inv,indent=2,default=str)
         st.download_button('Download investigation JSON + provenance',report,file_name=f'medsafe_{drug}_investigation.json',mime='application/json')
-        st.download_button('Download knowledge graph GraphML', '\n'.join(nx.generate_graphml(g)),file_name=f'medsafe_{drug}_graph.graphml',mime='application/xml')
+        st.download_button('Download knowledge graph GraphML',graphml_bytes(g),file_name=f'medsafe_{drug}_graph.graphml',mime='application/xml')
+        st.download_button('Download comprehensive Markdown evidence report',markdown_report(inv),file_name=f'medsafe_{drug}_evidence.md',mime='text/markdown')
 
         st.download_button('Download printable HTML investigation report',investigation_report(inv),file_name=f'medsafe_{drug}_report.html',mime='text/html')
