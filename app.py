@@ -6,9 +6,10 @@ import networkx as nx
 from core import *
 from investigator import annual_trend, classify_reactions, evidence_gate, investigation_report
 from reporting_v104 import markdown_report, build_evidence_graph, graphml_bytes, summary, record_link
+from intelligence_v105 import QUESTIONS, concept_graph, bounded_view, paths
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.4.1-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.5-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 st.sidebar.caption('Live openFDA requests; source timestamps and URLs retained in investigation exports.')
@@ -30,7 +31,20 @@ def coverage(data, label):
             st.dataframe(pd.DataFrame(data['pages']),use_container_width=True)
 def table(data):
     return pd.DataFrame([{'term':r.get('term',''),'count':r.get('count',0)} for r in data.get('results',[])])
-t1,t2,t3,t4=st.tabs(['📊 Safety Signal Explorer','⚠️ Medication Error Intelligence','📜 Regulatory Evidence','🧠 Agentic Safety Investigator'])
+t0,t1,t2,t3,t4,t5=st.tabs(['💡 20 Intelligence Questions','📊 Safety Signal Explorer','⚠️ Medication Error Intelligence','📜 Regulatory Evidence','🧠 Agentic Safety Investigator','🕸️ Living Knowledge Graph'])
+with t0:
+    st.subheader('20 Investigative Intelligence Questions')
+    st.caption('Questions describe research directions, not confirmed findings. Some require additional literature, trial or biological data not currently integrated.')
+    qdf=pd.DataFrame([{'#':i,'Theme':theme,'Investigative question':question,'Required evidence':sources} for i,(theme,question,sources) in enumerate(QUESTIONS,1)])
+    st.dataframe(qdf,use_container_width=True,hide_index=True)
+    choice=st.selectbox('Select a research question',list(range(20)),format_func=lambda i:f'{i+1}. {QUESTIONS[i][1]}')
+    st.info(f'Selected medication: {drug}. Required evidence: {QUESTIONS[choice][2]}.')
+    if st.button('Prepare question for investigation',key='prepare_q105'):
+        st.session_state['selected_question_v105']=QUESTIONS[choice][1]
+        st.success('Question saved. Open Agentic Safety Investigator and select Run investigation to retrieve available FDA evidence.')
+    if st.session_state.get('selected_question_v105'):
+        st.write('Current research question:',st.session_state['selected_question_v105'])
+
 with t1:
     st.subheader('FAERS reported adverse-event terms')
     ev=safe('events')
@@ -188,3 +202,53 @@ with t4:
         st.markdown('**Evidence-grounded findings:**')
         st.write(f"For {drug}, the current retrieval returned {len(reactions)} displayed reaction terms, {len(evidence['errors'].get('results',[]))} medication-error records, {len(evidence['labels'].get('results',[]))} label records, and {len(evidence['recalls'].get('results',[]))} recall records. These are retrieval counts, not incidence or risk estimates.")
         for kind in ('errors','labels','recalls'):coverage(evidence[kind],kind.title())
+
+with t5:
+    st.subheader('Living Knowledge Graph · Evidence associations')
+    st.caption('Graph is reconstructed from the current investigation. Concept nodes are shared across records. This version does not yet persist graph growth between sessions or infer biomedical mechanisms.')
+    inv=st.session_state.get('investigation')
+    if not inv or inv.get('drug')!=drug:
+        st.info('Run an investigation for the selected medication in the Agentic Safety Investigator tab to populate this graph.')
+    else:
+        try:
+            full=concept_graph(inv)
+            c1,c2,c3=st.columns(3)
+            c1.metric('Evidence graph nodes',full.number_of_nodes())
+            c2.metric('Evidence graph edges',full.number_of_edges())
+            c3.metric('Connected components',nx.number_weakly_connected_components(full))
+            st.caption('The complete evidence-derived graph is separate from the bounded visualization. All retrieved records are limited by API retrieval coverage.')
+            node_options=list(full.nodes)
+            root='drug:'+drug.casefold()
+            focus=st.selectbox('Focus concept',node_options,index=node_options.index(root) if root in node_options else 0,format_func=lambda n:f'{full.nodes[n].get("kind")}: {full.nodes[n].get("label",n)}')
+            with st.form('living_graph_settings_v105'):
+                hops=st.slider('Neighborhood hops',1,6,3)
+                cap=st.slider('Maximum displayed nodes',15,120,60,5)
+                st.form_submit_button('Apply graph view')
+            view=bounded_view(full,focus,hops,cap)
+            st.write(f'Displaying {view.number_of_nodes()} of {full.number_of_nodes()} nodes; {view.number_of_edges()} evidence links.')
+            import plotly.graph_objects as go
+            pos=nx.spring_layout(view,seed=17,iterations=45)
+            ex=[];ey=[]
+            for a,b in view.edges:
+                ex.extend([pos[a][0],pos[b][0],None]);ey.extend([pos[a][1],pos[b][1],None])
+            fig=go.Figure()
+            fig.add_trace(go.Scatter(x=ex,y=ey,mode='lines',line=dict(width=0.8,color='#9aabba'),hoverinfo='skip',showlegend=False))
+            palette={'drug':'#e67e22','record':'#94a3b8','event':'#d94866','reported_medicine':'#2e86c1','label_medicine':'#16a085','label_section':'#8e44ad','recall_reason':'#b7950b'}
+            for kind in sorted({view.nodes[n].get('kind','other') for n in view}):
+                nodes=[n for n in view if view.nodes[n].get('kind')==kind]
+                fig.add_trace(go.Scatter(x=[pos[n][0] for n in nodes],y=[pos[n][1] for n in nodes],mode='markers',name=kind,marker=dict(size=15 if kind=='drug' else 9,color=palette.get(kind,'#777')),text=[view.nodes[n].get('label',n) for n in nodes],hovertemplate='%{text}<extra>'+kind+'</extra>'))
+            fig.update_layout(height=650,xaxis=dict(visible=False),yaxis=dict(visible=False),margin=dict(l=10,r=10,t=10,b=10),legend=dict(orientation='h'))
+            st.plotly_chart(fig,use_container_width=True)
+            target=st.selectbox('Multi-hop destination',node_options,format_func=lambda n:f'{full.nodes[n].get("kind")}: {full.nodes[n].get("label",n)}')
+            if st.button('Find evidence paths',key='paths_v105'):
+                found=paths(full,focus,target,6)
+                if not found:st.info('No path within six hops between these nodes.')
+                for i,path in enumerate(found,1):
+                    st.markdown(f'**Path {i} ({len(path)-1} hops):** '+' → '.join(full.nodes[n].get('label',n) for n in path))
+                    with st.expander(f'Inspect evidence for path {i}'):
+                        for a,b in zip(path,path[1:]):
+                            edge=full.get_edge_data(a,b) or full.get_edge_data(b,a) or {}
+                            st.write(edge.get('relation','association'),edge.get('source',''))
+            st.download_button('Download complete evidence graph GraphML',graphml_bytes(full),file_name=f'medsafe_{drug}_concept_graph_v105.graphml',mime='application/xml',key='full_graph_v105')
+        except Exception as exc:
+            st.error(f'Living graph unavailable: {type(exc).__name__}: {str(exc)[:250]}')
