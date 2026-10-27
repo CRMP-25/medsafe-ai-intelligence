@@ -44,14 +44,52 @@ def events(drug, field='patient.drug.medicinalproduct', limit=15):
     return fetch('drug/event',{'search':f'{field}:"{drug}"','count':'patient.reaction.reactionmeddrapt.exact','limit':limit})
 def trend(drug):
     return annual_report_totals(drug)
-def labels(drug):
-    return fetch('drug/label',{'search':f'openfda.generic_name:"{drug}"','limit':5})
-def recalls(drug):
-    return fetch('drug/enforcement',{'search':f'product_description:"{drug}"','limit':20})
-def errors(drug):
+def paginated_fetch(endpoint, search, max_records=500, page_size=100):
+    """Fetch bounded openFDA pages; expose provider total and incomplete retrieval.
+
+    A partial result is never silently treated as a complete population.
+    """
+    if not (1 <= page_size <= 1000 and 1 <= max_records <= 25000):
+        raise ValueError('Invalid retrieval limits')
+    rows=[]; pages=[]; total=None; error=None
+    while len(rows)<max_records:
+        size=min(page_size,max_records-len(rows))
+        params={'search':search,'limit':size,'skip':len(rows)}
+        try:
+            page=fetch(endpoint,params)
+        except requests.RequestException as exc:
+            error=str(exc);break
+        pages.append({'url':page['url'],'retrieved_utc':page['retrieved_utc'],'count':len(page['results'])})
+        if total is None: total=page['total']
+        if not page['results']:break
+        rows.extend(page['results'])
+        if len(page['results'])<size or (total is not None and len(rows)>=total):break
+    return {'results':rows,'total':total,'retrieved':len(rows),
+            'complete':error is None and total is not None and len(rows)>=total,
+            'truncated':total is not None and len(rows)<total,
+            'error':error,'pages':pages,'url':pages[0]['url'] if pages else None,
+            'retrieved_utc':datetime.now(timezone.utc).isoformat(),
+            'query':search,'max_records':max_records}
+
+def labels(drug, max_records=100):
+    return paginated_fetch('drug/label',f'openfda.generic_name:"{drug}"',max_records)
+def recalls(drug, max_records=500):
+    return paginated_fetch('drug/enforcement',f'product_description:"{drug}"',max_records)
+def errors(drug, max_records=500):
     terms=['Medication error','Overdose','Incorrect dose administered','Wrong drug administered','Drug administration error','Product confusion']
     query=' OR '.join('patient.reaction.reactionmeddrapt:"'+term+'"' for term in terms)
-    return fetch('drug/event',{'search':f'patient.drug.medicinalproduct:"{drug}" AND ('+query+')','limit':100})
+    return paginated_fetch('drug/event',f'patient.drug.medicinalproduct:"{drug}" AND ('+query+')',max_records)
+def unique_case_rows(rows):
+    """Collapse duplicate report IDs, preferring highest numeric version where available."""
+    by_id={}; unkeyed=[]
+    for row in rows:
+        rid=row.get('safetyreportid')
+        if not rid:unkeyed.append(row);continue
+        old=by_id.get(str(rid))
+        if old is None or int(row.get('safetyreportversion') or 0)>int(old.get('safetyreportversion') or 0):
+            by_id[str(rid)]=row
+    return list(by_id.values())+unkeyed
+
 def disproportionality(a,b,c,d):
     if not all(type(x) is int and x>=0 for x in (a,b,c,d)): raise ValueError('Nonnegative integer cells required')
     if a+b==0 or c+d==0 or a+c==0 or b+d==0: raise ValueError('Each row and column must contain at least one observed report')

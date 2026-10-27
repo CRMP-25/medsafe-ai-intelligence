@@ -38,6 +38,6 @@ def investigation_report(inv):
     sections += ['</ul><h2>Retrieved evidence summary</h2><ul>']
     for kind, payload in inv.get('evidence',{}).items():
         count=len(payload.get('results',[])) if isinstance(payload,dict) else 0
-        sections.append(f'<li>{html.escape(kind)}: {count} retrieved records or aggregates (API limits apply)</li>')
+        sections.append(f'<li>{html.escape(kind)}: {count} retrieved records or aggregates; provider total: {html.escape(str(payload.get("total","unknown"))) if isinstance(payload,dict) else "unknown"}; complete: {html.escape(str(payload.get("complete","unknown"))) if isinstance(payload,dict) else "unknown"}</li>')
     sections.append('</ul>')
     return '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>MedSafe Investigation</title><style>body{font:16px system-ui;max-width:850px;margin:48px auto;line-height:1.55;color:#183049}h1,h2{color:#075e75}li{margin:8px 0;overflow-wrap:anywhere}</style></head><body>'+''.join(sections)+'</body></html>'

@@ -7,7 +7,7 @@ from core import *
 from investigator import annual_trend, classify_reactions, evidence_gate, investigation_report
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.2-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.3-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 st.sidebar.caption('Live openFDA requests; source timestamps and URLs retained in investigation exports.')
@@ -16,6 +16,17 @@ def load(kind,drug): return {'events':events,'trend':trend,'labels':labels,'reca
 def safe(kind):
     try:return load(kind,drug)
     except Exception as e:st.error(f'{kind} unavailable: {e}');return None
+def coverage(data, label):
+    if not data:return
+    total=data.get('total'); retrieved=len(data.get('results',[]))
+    if total is not None:
+        st.metric(f'{label}: retrieved / total matching',f'{retrieved:,} / {total:,}')
+        if retrieved<total:st.warning(f'Partial retrieval: {retrieved:,} of {total:,} matching records. This is not a complete population.')
+    else:st.caption(f'{label}: {retrieved:,} retrieved; provider total not available.')
+    if data.get('error'):st.error('Retrieval stopped early: '+str(data['error']))
+    if data.get('pages'):
+        with st.expander(f'{label} · API page provenance'):
+            st.dataframe(pd.DataFrame(data['pages']),use_container_width=True)
 def table(data):
     return pd.DataFrame([{'term':r.get('term',''),'count':r.get('count',0)} for r in data.get('results',[])])
 t1,t2,t3,t4=st.tabs(['📊 Safety Signal Explorer','⚠️ Medication Error Intelligence','📜 Regulatory Evidence','🧠 Agentic Safety Investigator'])
@@ -50,24 +61,34 @@ with t2:
     st.caption('Selected MedDRA terms are grouped into dosing, administration, product confusion and general error categories. This is a non-exhaustive term-based screen, not validated case adjudication.')
     er=safe('errors')
     if er:
+        coverage(er,'Medication-error reports')
+        deduped=unique_case_rows(er['results'])
+        st.caption(f'Unique safetyreportid records in retrieved pages: {len(deduped):,}; raw retrieved: {len(er["results"]):,}. This is report-ID deduplication, not validated clinical case adjudication.')
         rows=[]
-        for r in er['results']:
-            rows.append({'safetyreportid':r.get('safetyreportid'),'receivedate':r.get('receivedate'),'categories':', '.join(classify_reactions(r)) or 'Unclassified', 'reactions':'; '.join(x.get('reactionmeddrapt','') for x in r.get('patient',{}).get('reaction',[]))})
+        for r in deduped:
+            rows.append({'safetyreportid':r.get('safetyreportid'),'receivedate':r.get('receivedate'),'version':r.get('safetyreportversion'),'categories':', '.join(classify_reactions(r)) or 'Unclassified', 'reactions':'; '.join(x.get('reactionmeddrapt','') for x in r.get('patient',{}).get('reaction',[]))})
         if rows: st.dataframe(pd.DataFrame(rows),use_container_width=True)
         else: st.info('No matching medication-error reports returned for this query.')
-        st.caption('Source: '+er['url'])
+        st.caption('Source: '+str(er.get('url') or 'unavailable'))
 with t3:
     st.subheader('FDA labeling and recall records')
     lab=safe('labels'); rec=safe('recalls')
     if lab:
+        coverage(lab,'FDA labels')
         for i,r in enumerate(lab['results']):
             with st.expander(f"Label {i+1} · {', '.join(r.get('openfda',{}).get('brand_name',[])[:2]) or drug}"):
                 for k in ['boxed_warning','warnings','contraindications','precautions','dosage_and_administration']:
                     if r.get(k):st.markdown('**'+k.replace('_',' ').title()+'**');st.write(' '.join(r[k])[:7000])
         st.caption('Label query: '+lab['url'])
     if rec:
-        recall_rows=[{'date':x.get('report_date'),'reason':x.get('reason_for_recall'),'status':x.get('status'),'recall_number':x.get('recall_number')} for x in rec['results']]
-        if recall_rows: st.dataframe(pd.DataFrame(recall_rows),use_container_width=True)
+        coverage(rec,'FDA recalls')
+        recall_rows=[{'date':pd.to_datetime(x.get('report_date'),format='%Y%m%d',errors='coerce').date() if x.get('report_date') else None,'reason':x.get('reason_for_recall'),'status':x.get('status'),'recall_number':x.get('recall_number')} for x in rec['results']]
+        if recall_rows:
+            rdf=pd.DataFrame(recall_rows)
+            statuses=['All']+sorted(str(x) for x in rdf['status'].dropna().unique())
+            chosen=st.selectbox('Recall status',statuses)
+            if chosen!='All':rdf=rdf[rdf['status']==chosen]
+            st.dataframe(rdf,use_container_width=True)
         else: st.info('No matching recall records returned for this query.')
         st.caption('Recall query: '+rec['url'])
 with t4:
@@ -84,6 +105,19 @@ with t4:
         evidence=inv['evidence']; reactions=evidence['events'].get('results',[])[:12]
         sections=[x for x in ['boxed_warning','warnings','contraindications'] if any(x in z for z in evidence['labels'].get('results',[]))]
         g=graph(drug,reactions,sections)
+        # Evidence-document nodes and typed provenance links, without causal claims.
+        for kind in ('errors','labels','recalls'):
+            payload=evidence.get(kind,{})
+            if not payload.get('url'):continue
+            source_id=f'openFDA {kind}'
+            g.add_node(source_id,kind='evidence source',url=payload['url'])
+            g.add_edge(drug,source_id,relation='queried evidence source',source=payload['url'])
+            for j,record in enumerate(payload.get('results',[])[:12]):
+                if kind=='errors':rid=str(record.get('safetyreportid') or j); name=f'FAERS report {rid}'
+                elif kind=='recalls':name=f'Recall {record.get("recall_number") or j}'
+                else:name=f'FDA label {record.get("id") or j}'
+                g.add_node(name,kind=kind+' record')
+                g.add_edge(source_id,name,relation='returned record',source=payload['url'])
         import plotly.graph_objects as go
         pos=nx.spring_layout(g,seed=17)
         edges=[]
@@ -93,7 +127,8 @@ with t4:
         st.markdown('**Evidence gates:**')
         st.json(evidence_gate(evidence))
         st.markdown('**Evidence-grounded findings:**')
-        st.write(f"For {drug}, the current retrieval returned {len(reactions)} displayed reaction terms, {len(evidence['errors'].get('results',[]))} medication-error matching records, {len(evidence['labels'].get('results',[]))} label records, and {len(evidence['recalls'].get('results',[]))} recall records. These are retrieval counts, not incidence or risk estimates.")
+        st.write(f"For {drug}, the current retrieval returned {len(reactions)} displayed reaction terms, {len(evidence['errors'].get('results',[]))} medication-error records, {len(evidence['labels'].get('results',[]))} label records, and {len(evidence['recalls'].get('results',[]))} recall records. These are retrieval counts, not incidence or risk estimates.")
+        for kind in ('errors','labels','recalls'):coverage(evidence[kind],kind.title())
         report=json.dumps(inv,indent=2,default=str)
         st.download_button('Download investigation JSON + provenance',report,file_name=f'medsafe_{drug}_investigation.json',mime='application/json')
         st.download_button('Download knowledge graph GraphML', '\n'.join(nx.generate_graphml(g)),file_name=f'medsafe_{drug}_graph.graphml',mime='application/xml')
