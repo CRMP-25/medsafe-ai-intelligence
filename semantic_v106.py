@@ -93,8 +93,8 @@ def associations(g, min_records=1):
                        'concept_b':g.nodes[b]['label'],'type_b':g.nodes[b]['kind'],
                        'co_reported_records':count,'evidence_type':'within-record co-mention',
                        'causal_inference':'NOT ESTABLISHED',
-                       'source_ids':', '.join(x[0] for x in examples[(a,b)][:8]),
-                       'source_urls':' | '.join(x[1] for x in examples[(a,b)][:8])})
+                       'source_ids':', '.join(x[0] for x in examples[(a,b)]),
+                       'source_urls':' | '.join(x[1] for x in examples[(a,b)])})
     return result
 
 def export_bundle(g, drug):
