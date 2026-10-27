@@ -1,0 +1,26 @@
+name: MedSafe CI
+on:
+  push:
+    branches: ["testing", "v*-testing"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile Python modules
+        run: python -m compileall -q app.py core.py investigator.py intelligence_v105.py reporting_v104.py reporting_v107.py semantic_v106.py scripts tests
+      - name: Run deterministic tests
+        run: python -m pytest -q
+      - name: Validate deterministic report fixture
+        run: python scripts/validate_export.py --self-test
