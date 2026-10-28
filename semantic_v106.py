@@ -33,7 +33,7 @@ def _edge(g, a, b, relation, url='', record_id='', evidence_type='record_mention
                    supporting_records=1 if record_id else 0,evidence_type=evidence_type,
                    interpretation='co-mentioned or indexed; causality not established')
 
-def semantic_graph(inv, limit_per_kind=500):
+def semantic_graph(inv, limit_per_kind=None):
     g=nx.DiGraph()
     drug=clean(inv.get('drug','Medication'),150)
     root=_node(g,'drug',drug)

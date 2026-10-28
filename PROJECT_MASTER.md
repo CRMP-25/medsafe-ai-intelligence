@@ -142,3 +142,12 @@ No live FDA integration test, external API freshness check, clinical terminology
 - User provided comprehensive investigation ZIP named `complete_v107`; earlier assistant reported 2,063 nodes, 7,666 edges, 29,771 associations, and 647 evidence records, with 500/7,078 medication-error records retrieved (about 7.1%). These figures are historical snapshot findings and require re-validation for new investigations.
 - V1.0.10 candidate adds display-only sex-code decoding, medication label presentation, bounded selectable medication-error retrieval caps, retrieval coverage audit, corrected complete ZIP version label, normalization review in ZIP, and deterministic tests. No claim of deployed V1.0.10 or live FDA API validation.
 - Outstanding: inspect all 45 candidate groups; verify all FDA source links and report semantics independently; investigate scalability at larger retrieval caps; controlled clinical ontology mapping, meaningful relationship categorization, durable graph persistence, validated case-level deduplication and signal analysis.
+
+
+### V1.0.11 conference-readiness candidate (2026-10-27)
+- User requests one complete investigation ZIP download at the absolute bottom of the **Main** tab, which also retains the 20 intelligence questions; no duplicate ZIP button in Living Knowledge Graph.
+- Source inspection confirmed `semantic_graph(inv, limit_per_kind=500)` silently truncated each evidence source to 500 records even when 1,000 medication-error reports were retrieved. The V1.0.11 candidate removes this internal truncation. This explains the V1.0.10 500-vs-1,000 graph discrepancy, subject to fresh live validation.
+- Graph now uses active investigation snapshot, resets after a new retrieval, and Main tab can create its ZIP without visiting Living Knowledge Graph.
+- Export version manifest and filename updated to V1.0.11. Existing semantic graph persistence remains session-only; external JSON merge supported.
+- Scientific safeguards: retrieval coverage remains partial; co-reporting is not causal or incidence; graph count can grow substantially and requires performance evaluation at higher retrieval caps.
+- Status: local candidate only; GitHub CI, Streamlit deployment, and live FDA acceptance pending.

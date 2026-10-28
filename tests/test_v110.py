@@ -21,4 +21,4 @@ def test_zip_version_and_normalization():
     with zipfile.ZipFile(io.BytesIO(raw)) as z:
         assert 'normalization_review.json' in z.namelist()
         manifest=json.loads(z.read('manifest.json'))
-        assert manifest['application_version']=='1.0.10-testing'
+        assert manifest['application_version']=='1.0.11-testing'

@@ -13,7 +13,7 @@ from intelligence_v109 import canonical_groups, explain_association
 from intelligence_v110 import display_label, display_association, retrieval_audit
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.10-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.11-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 error_cap=st.sidebar.selectbox('Maximum medication-error reports to retrieve', [500,1000,2000,5000], index=0, help='Higher caps may increase FDA requests, processing time, and memory. Not a guarantee of complete coverage.')
@@ -40,6 +40,8 @@ def run_shared_investigation(selected_drug):
             'Graph connections are evidence associations, not causal edges.'
         ]
     }
+    st.session_state.pop('semantic_graph_v106', None)  # New retrieval invalidates prior graph snapshot.
+    st.session_state.pop('semantic_graph_investigation_id_v111', None)
     return st.session_state['investigation']
 
 def safe(kind):
@@ -58,7 +60,7 @@ def coverage(data, label):
             st.dataframe(pd.DataFrame(data['pages']),use_container_width=True)
 def table(data):
     return pd.DataFrame([{'term':r.get('term',''),'count':r.get('count',0)} for r in data.get('results',[])])
-t0,t1,t2,t3,t4,t5=st.tabs(['💡 20 Intelligence Questions','📊 Safety Signal Explorer','⚠️ Medication Error Intelligence','📜 Regulatory Evidence','🧠 Agentic Safety Investigator','🕸️ Living Knowledge Graph'])
+t0,t1,t2,t3,t4,t5=st.tabs(['🏠 Main · 20 Intelligence Questions','📊 Safety Signal Explorer','⚠️ Medication Error Intelligence','📜 Regulatory Evidence','🧠 Agentic Safety Investigator','🕸️ Living Knowledge Graph'])
 with t0:
     st.subheader('20 Investigative Intelligence Questions')
     st.caption('Questions describe research directions, not confirmed findings. Some require additional literature, trial or biological data not currently integrated.')
@@ -71,6 +73,24 @@ with t0:
         st.success('Question saved. Open Agentic Safety Investigator and select Run investigation to retrieve available FDA evidence.')
     if st.session_state.get('selected_question_v105'):
         st.write('Current research question:',st.session_state['selected_question_v105'])
+
+
+    st.divider()
+    st.subheader('Complete Investigation Package — Final Download')
+    st.caption('One ZIP containing the investigation, FDA provenance, complete evidence-derived semantic graph, all co-reporting associations, normalization review, and HTML/Markdown reports. This is the final section of the Main tab.')
+    current=st.session_state.get('investigation')
+    if current and current.get('drug')==drug:
+        with st.spinner('Preparing complete evidence package from the current investigation...'):
+            snapshot=current.get('generated_utc')
+            if st.session_state.get('semantic_graph_investigation_id_v111') != snapshot:
+                st.session_state['semantic_graph_v106']=semantic_graph(current, limit_per_kind=None)
+                st.session_state['semantic_graph_investigation_id_v111']=snapshot
+            complete_graph=st.session_state['semantic_graph_v106']
+            zip_bytes=complete_report_zip(current,complete_graph,drug)
+        st.download_button('📦 Download Complete Investigation Outputs (ZIP)', zip_bytes,
+            file_name=f'medsafe_{drug}_complete_v111.zip',mime='application/zip',key='complete_report_v111_main')
+    else:
+        st.info('Run an investigation in Agentic Safety Investigator first. The complete ZIP will then be available here.')
 
 with t1:
     st.subheader('FAERS reported adverse-event terms')
@@ -245,10 +265,12 @@ with t5:
             st.rerun()
         try:
             # Semantic graph is based on exact source-record fields, not inferred mechanisms.
-            fresh=semantic_graph(inv)
-            old=st.session_state.get('semantic_graph_v106')
-            full=merge_graphs(old,fresh) if old is not None else fresh
-            st.session_state['semantic_graph_v106']=full
+            # Build from every retrieved record; never silently truncate at 500.
+            snapshot_id=inv.get('generated_utc')
+            if st.session_state.get('semantic_graph_investigation_id_v111') != snapshot_id:
+                st.session_state['semantic_graph_v106']=semantic_graph(inv, limit_per_kind=None)
+                st.session_state['semantic_graph_investigation_id_v111']=snapshot_id
+            full=st.session_state['semantic_graph_v106']
             st.markdown('#### Evidence-grounded semantic associations · V1.0.10')
             st.caption('Readable labels below are presentation-only; original coded values and source evidence remain unchanged.')
             st.json(retrieval_audit(inv))
@@ -286,9 +308,6 @@ with t5:
                     file_name=f'medsafe_{drug}_normalization_review_v110.json', mime='application/json',
                     key='normalization_export_v109')
             if not pairs:st.info('No within-record concept pairs found in retrieved medication-error reports.')
-            st.markdown('#### One-click complete investigation export')
-            st.caption('Includes every association source ID and URL, complete evidence records, full graph JSON/GraphML, investigation data, and readable HTML/Markdown reports. No eight-record export cap.')
-            st.download_button('Download complete MedSafe investigation ZIP',complete_report_zip(inv,full,drug),file_name=f'medsafe_{drug}_complete_v110.zip',mime='application/zip',key='complete_report_v110')
             st.markdown('#### Portable graph growth')
             st.caption('Session growth is retained while this session is active. Streamlit Community Cloud local storage is not durable: download a graph bundle and upload it in a future session to continue growing the graph.')
             st.download_button('Download complete semantic graph JSON',export_bundle(full,drug),file_name=f'medsafe_{drug}_semantic_v106.json',mime='application/json')
