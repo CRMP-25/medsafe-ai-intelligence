@@ -9,11 +9,12 @@ from reporting_v104 import markdown_report, build_evidence_graph, graphml_bytes,
 from intelligence_v105 import QUESTIONS, concept_graph, bounded_view, paths
 from semantic_v106 import semantic_graph, associations, export_bundle, import_bundle, merge_graphs
 from reporting_v107 import complete_report_zip
+from version import APP_VERSION, EXPORT_TAG
 from intelligence_v109 import canonical_groups, explain_association
 from intelligence_v110 import display_label, display_association, retrieval_audit
 st.set_page_config(page_title='MedSafe AI Intelligence',page_icon='🛡️',layout='wide')
 st.markdown('''<style>.block-container{padding-top:1.3rem}.hero{background:linear-gradient(110deg,#12233e,#126b83);padding:24px;border-radius:16px;color:white}.hero h1{color:white;margin:0}.hero p{color:#d7f5fa;margin:8px 0 0}</style>''',unsafe_allow_html=True)
-st.markdown('<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V1.0.11-testing</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
+st.markdown(f'<div class="hero"><h1>🛡️ MedSafe AI Intelligence · V{APP_VERSION}</h1><p>Medication Safety & Substance Use Care | Evidence-grounded conference demonstration · October 30, 2026</p></div>',unsafe_allow_html=True)
 st.warning('FAERS is a spontaneous reporting system: reports do not establish causality, incidence, comparative safety, or a population risk denominator. Duplicate and incomplete reports are possible. Educational research tool; not clinical decision support.')
 drug=st.sidebar.selectbox('Medication',DRUGS)
 error_cap=st.sidebar.selectbox('Maximum medication-error reports to retrieve', [500,1000,2000,5000], index=0, help='Higher caps may increase FDA requests, processing time, and memory. Not a guarantee of complete coverage.')
@@ -88,7 +89,7 @@ with t0:
             complete_graph=st.session_state['semantic_graph_v106']
             zip_bytes=complete_report_zip(current,complete_graph,drug)
         st.download_button('📦 Download Complete Investigation Outputs (ZIP)', zip_bytes,
-            file_name=f'medsafe_{drug}_complete_v111.zip',mime='application/zip',key='complete_report_v111_main')
+            file_name=f'medsafe_{drug}_complete_{EXPORT_TAG}.zip',mime='application/zip',key='complete_report_v111_main')
     else:
         st.info('Run an investigation in Agentic Safety Investigator first. The complete ZIP will then be available here.')
 

@@ -11,7 +11,7 @@ def test_semantic_graph_no_500_record_truncation():
     assert sum(d.get('kind')=='record' for _,d in g.nodes(data=True))==650
     with zipfile.ZipFile(io.BytesIO(complete_report_zip(inv,g,'example'))) as z:
         manifest=json.loads(z.read('manifest.json'))
-        assert manifest['application_version']=='1.0.11-testing'
+        assert manifest['application_version']=='1.0.11.1-testing'
         assert manifest['record_sources']['errors']==650
 
 def test_one_zip_on_main_not_graph():
@@ -22,4 +22,4 @@ def test_one_zip_on_main_not_graph():
     assert main.count('Download Complete Investigation Outputs (ZIP)')==1
     assert 'complete_report_zip(' not in graph
     assert 'semantic_graph(current, limit_per_kind=None)' in main
-    assert 'complete_v111.zip' in main
+    assert 'complete_{EXPORT_TAG}.zip' in main

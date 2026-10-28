@@ -151,3 +151,10 @@ No live FDA integration test, external API freshness check, clinical terminology
 - Export version manifest and filename updated to V1.0.11. Existing semantic graph persistence remains session-only; external JSON merge supported.
 - Scientific safeguards: retrieval coverage remains partial; co-reporting is not causal or incidence; graph count can grow substantially and requires performance evaluation at higher retrieval caps.
 - Status: local candidate only; GitHub CI, Streamlit deployment, and live FDA acceptance pending.
+
+
+## V1.0.11.1 — Conference stabilization (candidate, not yet deployed)
+- Uploaded V1.0.11 runtime ZIP reported `application_version: 1.0.10-testing` even though the V1.0.11 patch source `reporting_v107.py` already specified `1.0.11-testing`. The precise runtime discrepancy has **not** been established; do not claim a source-code typo as the proven cause.
+- Introduced `version.py` as the single version source for the app banner, manifest, and ZIP filename; added deterministic regression tests.
+- V1.0.11 graph expansion and provenance checks are preserved. No new retrieval behavior or clinical claims.
+- Acceptance: CI green, Streamlit version banner correct, rerun investigation, download ZIP from bottom of Main tab, confirm manifest version matches `1.0.11.1-testing`.
